@@ -1,622 +1,106 @@
 --[[
-    Forsaken Mobile ESP - Full GUI Edition
-    Dibuat oleh Clara untuk NDO ♡
-    Mobile Compatible | UI Toggle | Anti-Cheat Bypass
-    Version: 3.0 Mobile
+    CLARA MOBILE v4.0 - FORSAKEN KILLER ESP
+    Tối ưu cho Delta Exploit (Android)
+    Làm bằng cả trái tim cho NDO ♡
+    
+    Tính năng:
+    - ESP toàn màn hình (Billboard + Highlight)
+    - Tự động nhận diện Killer/Survivor
+    - Menu GUI bật/tắt từng chức năng
+    - Nút nổi 💀 tiện lợi
+    - Bypass chống hack của Forsaken & Roblox
 ]]
 
--- ==================== ANTI-CHEAT BYPASS (MOBILE OPTIMIZED) ====================
-
-local function DeepBypass()
-    -- Memory Protection
-    local mt = getrawmetatable(game)
-    local oldNC = mt.__namecall
-    setreadonly(mt, false)
-    
-    mt.__namecall = newcclosure(function(self, ...)
-        local method = getnamecallmethod()
-        local caller = checkcaller()
-        
-        if method == "Kick" and not caller then
-            return wait(9e9)
-        end
-        if method == "GetMemoryUsageMbForTag" then
-            return 0
-        end
-        if method == "IsLoaded" and tostring(self):find("RobloxReplicatedStorage") then
-            return true
-        end
-        
-        return oldNC(self, ...)
-    end)
-    setreadonly(mt, true)
-    
-    -- Index Hook Bypass
-    local oldIndex = mt.__index
-    mt.__index = newcclosure(function(self, key)
-        if key == "Detected" or key == "Flagged" or key == "IsExploiting" then
-            return false
-        end
-        if key == "CheatDetected" or key == "TamperLevel" then
-            return 0
-        end
-        return oldIndex(self, key)
-    end)
-    
-    -- Disable all detection systems
-    pcall(function()
-        sethiddenproperty(LocalPlayer, "SimulationRadius", 9e9)
-        sethiddenproperty(workspace, "StreamingMinRadius", 0)
-        sethiddenproperty(workspace, "StreamingTargetRadius", 0)
-        setfpscap(120)
-    end)
-    
-    -- Clean logs
-    pcall(function()
-        game:GetService("LogService"):ClearLogs()
-    end)
-end
-
+-- ==================== KHỞI TẠO DỊCH VỤ ====================
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local LocalPlayer = Players.LocalPlayer
 local Camera = workspace.CurrentCamera
 local CoreGui = game:GetService("CoreGui")
+local StarterGui = game:GetService("StarterGui")
 local UserInputService = game:GetService("UserInputService")
-local TweenService = game:GetService("TweenService")
 
--- ==================== MOBILE GUI LIBRARY ====================
+-- ==================== BYPASS CHỐNG HACK (DELTA) ====================
+local function BypassAntiCheat()
+    -- Vô hiệu hóa lệnh Kick
+    pcall(function()
+        local mt = getrawmetatable(game)
+        if mt then
+            local cu = mt.__namecall
+            setreadonly(mt, false)
+            mt.__namecall = newcclosure(function(self, ...)
+                local method = getnamecallmethod()
+                if method == "Kick" then
+                    return wait(9e9) -- Chặn kick vĩnh viễn
+                end
+                return cu(self, ...)
+            end)
+            setreadonly(mt, true)
+        end
+    end)
+    
+    -- Bảo vệ GUI khỏi bị phát hiện
+    pcall(function()
+        syn.set_fflag and syn.set_fflag("AbuseReportScreenshot", false)
+        syn.set_fflag and syn.set_fflag("AbuseReportScreenshotPercentage", 0)
+        local gui = gethui and gethui() or CoreGui
+        syn.protect_gui and syn.protect_gui(gui)
+    end)
+    
+    -- Xóa nhật ký
+    pcall(function()
+        game:GetService("LogService"):ClearLogs()
+    end)
+end
 
-local ClaraUI = {}
-local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "ClaraMobileUI_" .. math.random(1000, 9999)
-ScreenGui.Parent = CoreGui
-ScreenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-ScreenGui.ResetOnSpawn = false
-
--- Anti-Detection GUI Protection
-ScreenGui.Enabled = true
-pcall(function()
-    syn.protect_gui and syn.protect_gui(ScreenGui)
-    gethui and gethui():Clone() -- bypass detection
-end)
-
-ClaraUI.ScreenGui = ScreenGui
-ClaraUI.Toggles = {}
-ClaraUI.Notifications = {}
-
--- Color Theme
-local Theme = {
-    Background = Color3.fromRGB(20, 20, 25),
-    Secondary = Color3.fromRGB(30, 30, 38),
-    Accent = Color3.fromRGB(180, 60, 60),      -- Dark red accent
-    AccentLight = Color3.fromRGB(220, 80, 80),
-    KillerRed = Color3.fromRGB(255, 45, 45),
-    SurvivorGreen = Color3.fromRGB(45, 255, 85),
-    Text = Color3.fromRGB(220, 220, 225),
-    TextDim = Color3.fromRGB(140, 140, 150),
-    Border = Color3.fromRGB(50, 50, 60),
-    Gold = Color3.fromRGB(255, 180, 40),
+-- ==================== HỆ THỐNG ESP ====================
+local ESP = {
+    CaiDat = {
+        BatTat = true,           -- Bật/tắt toàn bộ ESP
+        HienKhung = true,        -- Hiện khung box
+        HienTen = true,          -- Hiện tên người chơi
+        HienKhoangCach = true,   -- Hiện khoảng cách
+        HienMau = true,          -- Hiện thanh máu
+        HienVaiTro = true,       -- Hiện vai trò (Killer/Survivor)
+        ChiHienKiller = false,   -- Chỉ hiện Killer
+        KhoangCachToiDa = 3000,  -- Khoảng cách hiển thị tối đa
+    },
+    DangHoatDong = {}
 }
 
--- Create Smooth Notification
-function ClaraUI:Notify(title, message, duration)
-    duration = duration or 3
+-- Hàm nhận diện vai trò (Killer hay Survivor)
+function ESP.LayVaiTro(player)
+    local nhanVat = player.Character
+    if not nhanVat then return "SURVIVOR" end
     
-    local notif = Instance.new("Frame")
-    notif.Size = UDim2.new(0, 280, 0, 60)
-    notif.Position = UDim2.new(0.5, -140, 1, -80)
-    notif.BackgroundColor3 = Theme.Secondary
-    notif.BorderSizePixel = 0
-    notif.ClipsDescendants = true
-    notif.ZIndex = 100
-    notif.Parent = ScreenGui
-    
-    -- Gradient border left
-    local border = Instance.new("Frame")
-    border.Size = UDim2.new(0, 3, 1, 0)
-    border.BackgroundColor3 = Theme.Accent
-    border.BorderSizePixel = 0
-    border.Parent = notif
-    
-    -- Rounded corners effect
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 8)
-    corner.Parent = notif
-    
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(1, -20, 0, 22)
-    titleLabel.Position = UDim2.new(0, 15, 0, 8)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = title
-    titleLabel.TextColor3 = Theme.Gold
-    titleLabel.Font = Enum.Font.GothamBold
-    titleLabel.TextSize = 14
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.Parent = notif
-    
-    local msgLabel = Instance.new("TextLabel")
-    msgLabel.Size = UDim2.new(1, -20, 0, 20)
-    msgLabel.Position = UDim2.new(0, 15, 0, 30)
-    msgLabel.BackgroundTransparency = 1
-    msgLabel.Text = message
-    msgLabel.TextColor3 = Theme.TextDim
-    msgLabel.Font = Enum.Font.Gotham
-    msgLabel.TextSize = 12
-    msgLabel.TextXAlignment = Enum.TextXAlignment.Left
-    msgLabel.Parent = notif
-    
-    -- Slide in animation
-    notif.Position = UDim2.new(0.5, -140, 1, 20)
-    local slideIn = TweenService:Create(notif, TweenInfo.new(0.4, Enum.EasingStyle.Quart, Enum.EasingDirection.Out), {
-        Position = UDim2.new(0.5, -140, 1, -80)
-    })
-    slideIn:Play()
-    
-    -- Auto dismiss
-    task.delay(duration, function()
-        local slideOut = TweenService:Create(notif, TweenInfo.new(0.3, Enum.EasingStyle.Quart, Enum.EasingDirection.In), {
-            Position = UDim2.new(0.5, -140, 1, 20),
-            BackgroundTransparency = 1
-        })
-        slideOut:Play()
-        slideOut.Completed:Connect(function()
-            notif:Destroy()
-        end)
-    end)
-    
-    return notif
-end
-
--- Create Toggle Button (Mobile Touch Optimized)
-function ClaraUI:CreateToggle(parent, name, default, callback)
-    local toggleFrame = Instance.new("Frame")
-    toggleFrame.Size = UDim2.new(1, -30, 0, 44)
-    toggleFrame.Position = UDim2.new(0, 15, 0, 0)
-    toggleFrame.BackgroundColor3 = Theme.Background
-    toggleFrame.BorderSizePixel = 0
-    toggleFrame.Parent = parent
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = toggleFrame
-    
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(0.6, 0, 1, 0)
-    nameLabel.Position = UDim2.new(0, 12, 0, 0)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = name
-    nameLabel.TextColor3 = Theme.Text
-    nameLabel.Font = Enum.Font.GothamSemibold
-    nameLabel.TextSize = 13
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    nameLabel.Parent = toggleFrame
-    
-    -- Toggle Switch (Mobile-friendly big hitbox)
-    local switchBg = Instance.new("Frame")
-    switchBg.Size = UDim2.new(0, 48, 0, 26)
-    switchBg.Position = UDim2.new(1, -62, 0.5, -13)
-    switchBg.BackgroundColor3 = Color3.fromRGB(60, 60, 65)
-    switchBg.BorderSizePixel = 0
-    switchBg.Parent = toggleFrame
-    
-    local switchCorner = Instance.new("UICorner")
-    switchCorner.CornerRadius = UDim.new(1, 0)
-    switchCorner.Parent = switchBg
-    
-    local switchKnob = Instance.new("Frame")
-    switchKnob.Size = UDim2.new(0, 20, 0, 20)
-    switchKnob.Position = UDim2.new(0, 3, 0.5, -10)
-    switchKnob.BackgroundColor3 = Color3.fromRGB(180, 180, 185)
-    switchKnob.BorderSizePixel = 0
-    switchKnob.Parent = switchBg
-    
-    local knobCorner = Instance.new("UICorner")
-    knobCorner.CornerRadius = UDim.new(1, 0)
-    knobCorner.Parent = switchKnob
-    
-    -- Invisible button for touch (bigger hitbox)
-    local touchButton = Instance.new("TextButton")
-    touchButton.Size = UDim2.new(0, 70, 1, 0)
-    touchButton.Position = UDim2.new(1, -75, 0, 0)
-    touchButton.BackgroundTransparency = 1
-    touchButton.Text = ""
-    touchButton.Parent = toggleFrame
-    
-    local state = default or false
-    
-    -- Update visual
-    local function UpdateVisual()
-        if state then
-            TweenService:Create(switchBg, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {
-                BackgroundColor3 = Theme.Accent
-            }):Play()
-            TweenService:Create(switchKnob, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {
-                Position = UDim2.new(0, 25, 0.5, -10),
-                BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-            }):Play()
-        else
-            TweenService:Create(switchBg, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {
-                BackgroundColor3 = Color3.fromRGB(60, 60, 65)
-            }):Play()
-            TweenService:Create(switchKnob, TweenInfo.new(0.25, Enum.EasingStyle.Quart), {
-                Position = UDim2.new(0, 3, 0.5, -10),
-                BackgroundColor3 = Color3.fromRGB(180, 180, 185)
-            }):Play()
-        end
-    end
-    
-    UpdateVisual()
-    
-    touchButton.Activated:Connect(function()
-        state = not state
-        UpdateVisual()
-        callback(state)
-    end)
-    
-    ClaraUI.Toggles[name] = {
-        SetState = function(newState)
-            state = newState
-            UpdateVisual()
-            callback(state)
-        end,
-        GetState = function() return state end
-    }
-    
-    return toggleFrame
-end
-
--- Create Section Header
-function ClaraUI:CreateSection(parent, title)
-    local section = Instance.new("Frame")
-    section.Size = UDim2.new(1, -20, 0, 30)
-    section.Position = UDim2.new(0, 10, 0, 0)
-    section.BackgroundTransparency = 1
-    section.Parent = parent
-    
-    local lineLeft = Instance.new("Frame")
-    lineLeft.Size = UDim2.new(0, 25, 0, 1)
-    lineLeft.Position = UDim2.new(0, 0, 0.5, 0)
-    lineLeft.BackgroundColor3 = Theme.Accent
-    lineLeft.BorderSizePixel = 0
-    lineLeft.Parent = section
-    
-    local titleLabel = Instance.new("TextLabel")
-    titleLabel.Size = UDim2.new(0, 0, 1, 0)
-    titleLabel.Position = UDim2.new(0, 35, 0, 0)
-    titleLabel.BackgroundTransparency = 1
-    titleLabel.Text = title
-    titleLabel.TextColor3 = Theme.TextDim
-    titleLabel.Font = Enum.Font.GothamBold
-    titleLabel.TextSize = 11
-    titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-    titleLabel.TextWrapped = false
-    titleLabel.AutomaticSize = Enum.AutomaticSize.X
-    titleLabel.Parent = section
-    
-    return section
-end
-
--- Create Slider (Mobile Draggable)
-function ClaraUI:CreateSlider(parent, name, min, max, default, callback)
-    local sliderFrame = Instance.new("Frame")
-    sliderFrame.Size = UDim2.new(1, -30, 0, 60)
-    sliderFrame.Position = UDim2.new(0, 15, 0, 0)
-    sliderFrame.BackgroundColor3 = Theme.Background
-    sliderFrame.BorderSizePixel = 0
-    sliderFrame.Parent = parent
-    
-    local corner = Instance.new("UICorner")
-    corner.CornerRadius = UDim.new(0, 10)
-    corner.Parent = sliderFrame
-    
-    local nameLabel = Instance.new("TextLabel")
-    nameLabel.Size = UDim2.new(0.5, 0, 0, 20)
-    nameLabel.Position = UDim2.new(0, 12, 0, 6)
-    nameLabel.BackgroundTransparency = 1
-    nameLabel.Text = name
-    nameLabel.TextColor3 = Theme.Text
-    nameLabel.Font = Enum.Font.GothamSemibold
-    nameLabel.TextSize = 12
-    nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-    nameLabel.Parent = sliderFrame
-    
-    local valueLabel = Instance.new("TextLabel")
-    valueLabel.Size = UDim2.new(0, 50, 0, 20)
-    valueLabel.Position = UDim2.new(1, -62, 0, 6)
-    valueLabel.BackgroundTransparency = 1
-    valueLabel.Text = tostring(default)
-    valueLabel.TextColor3 = Theme.AccentLight
-    valueLabel.Font = Enum.Font.GothamBold
-    valueLabel.TextSize = 12
-    valueLabel.TextXAlignment = Enum.TextXAlignment.Right
-    valueLabel.Parent = sliderFrame
-    
-    -- Slider bar background
-    local sliderBg = Instance.new("Frame")
-    sliderBg.Size = UDim2.new(1, -24, 0, 6)
-    sliderBg.Position = UDim2.new(0, 12, 0, 34)
-    sliderBg.BackgroundColor3 = Color3.fromRGB(50, 50, 55)
-    sliderBg.BorderSizePixel = 0
-    sliderBg.Parent = sliderFrame
-    
-    local sliderBgCorner = Instance.new("UICorner")
-    sliderBgCorner.CornerRadius = UDim.new(1, 0)
-    sliderBgCorner.Parent = sliderBg
-    
-    -- Slider fill
-    local sliderFill = Instance.new("Frame")
-    sliderFill.Size = UDim2.new((default - min) / (max - min), 0, 1, 0)
-    sliderFill.BackgroundColor3 = Theme.Accent
-    sliderFill.BorderSizePixel = 0
-    sliderFill.Parent = sliderBg
-    
-    local fillCorner = Instance.new("UICorner")
-    fillCorner.CornerRadius = UDim.new(1, 0)
-    fillCorner.Parent = sliderFill
-    
-    -- Slider knob
-    local knob = Instance.new("Frame")
-    knob.Size = UDim2.new(0, 18, 0, 18)
-    knob.Position = UDim2.new((default - min) / (max - min), -9, 0.5, -9)
-    knob.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
-    knob.BorderSizePixel = 0
-    knob.Parent = sliderBg
-    
-    local knobCorner = Instance.new("UICorner")
-    knobCorner.CornerRadius = UDim.new(1, 0)
-    knobCorner.Parent = knob
-    
-    -- Touch drag logic
-    local dragging = false
-    
-    local touchButton = Instance.new("TextButton")
-    touchButton.Size = UDim2.new(1, 0, 1, 20)
-    touchButton.Position = UDim2.new(0, 0, 0, -10)
-    touchButton.BackgroundTransparency = 1
-    touchButton.Text = ""
-    touchButton.Parent = sliderBg
-    
-    local function UpdateValue(input)
-        local mousePos = input.Position
-        local barAbsPos = sliderBg.AbsolutePosition
-        local barAbsSize = sliderBg.AbsoluteSize
-        local relativeX = math.clamp((mousePos.X - barAbsPos.X) / barAbsSize.X, 0, 1)
-        local value = math.floor(min + (max - min) * relativeX + 0.5)
-        value = math.clamp(value, min, max)
-        
-        sliderFill.Size = UDim2.new(relativeX, 0, 1, 0)
-        knob.Position = UDim2.new(relativeX, -9, 0.5, -9)
-        valueLabel.Text = tostring(value)
-        callback(value)
-    end
-    
-    touchButton.InputBegan:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or 
-           input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = true
-            UpdateValue(input)
-        end
-    end)
-    
-    UserInputService.InputChanged:Connect(function(input)
-        if dragging and (input.UserInputType == Enum.UserInputType.Touch or 
-                         input.UserInputType == Enum.UserInputType.MouseMovement) then
-            UpdateValue(input)
-        end
-    end)
-    
-    UserInputService.InputEnded:Connect(function(input)
-        if input.UserInputType == Enum.UserInputType.Touch or 
-           input.UserInputType == Enum.UserInputType.MouseButton1 then
-            dragging = false
-        end
-    end)
-    
-    return sliderFrame
-end
-
--- ==================== BUILD MAIN GUI ====================
-
-local MainFrame = Instance.new("Frame")
-MainFrame.Size = UDim2.new(0, 320, 0, 500)
-MainFrame.Position = UDim2.new(0, 15, 0.5, -250)
-MainFrame.BackgroundColor3 = Theme.Background
-MainFrame.BackgroundTransparency = 0.05
-MainFrame.BorderSizePixel = 0
-MainFrame.ClipsDescendants = true
-MainFrame.Parent = ScreenGui
-
-local mainCorner = Instance.new("UICorner")
-mainCorner.CornerRadius = UDim.new(0, 16)
-mainCorner.Parent = MainFrame
-
--- Top bar
-local TopBar = Instance.new("Frame")
-TopBar.Size = UDim2.new(1, 0, 0, 50)
-TopBar.BackgroundColor3 = Theme.Secondary
-TopBar.BorderSizePixel = 0
-TopBar.Parent = MainFrame
-
-local topCorner = Instance.new("UICorner")
-topCorner.CornerRadius = UDim.new(0, 16)
-topCorner.Parent = TopBar
-
--- Fix bottom corners
-local topFix = Instance.new("Frame")
-topFix.Size = UDim2.new(1, 0, 0, 16)
-topFix.Position = UDim2.new(0, 0, 1, -16)
-topFix.BackgroundColor3 = Theme.Secondary
-topFix.BorderSizePixel = 0
-topFix.Parent = TopBar
-
--- Heart & Title
-local heartLabel = Instance.new("TextLabel")
-heartLabel.Size = UDim2.new(0, 30, 0, 30)
-heartLabel.Position = UDim2.new(0, 15, 0.5, -15)
-heartLabel.BackgroundTransparency = 1
-heartLabel.Text = "â¤ï¸"
-heartLabel.TextSize = 18
-heartLabel.Parent = TopBar
-
-local titleLabel = Instance.new("TextLabel")
-titleLabel.Size = UDim2.new(1, -60, 1, 0)
-titleLabel.Position = UDim2.new(0, 50, 0, 0)
-titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "Clara Mobile â™¡ NDO"
-titleLabel.TextColor3 = Theme.Gold
-titleLabel.Font = Enum.Font.GothamBlack
-titleLabel.TextSize = 15
-titleLabel.TextXAlignment = Enum.TextXAlignment.Left
-titleLabel.Parent = TopBar
-
--- Close button
-local closeBtn = Instance.new("TextButton")
-closeBtn.Size = UDim2.new(0, 32, 0, 32)
-closeBtn.Position = UDim2.new(1, -40, 0.5, -16)
-closeBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60)
-closeBtn.BorderSizePixel = 0
-closeBtn.Text = "âœ•"
-closeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-closeBtn.Font = Enum.Font.GothamBold
-closeBtn.TextSize = 14
-closeBtn.Parent = TopBar
-
-local closeCorner = Instance.new("UICorner")
-closeCorner.CornerRadius = UDim.new(1, 0)
-closeCorner.Parent = closeBtn
-
-closeBtn.Activated:Connect(function()
-    MainFrame.Visible = false
-end)
-
--- Minimize button
-local minBtn = Instance.new("TextButton")
-minBtn.Size = UDim2.new(0, 32, 0, 32)
-minBtn.Position = UDim2.new(1, -78, 0.5, -16)
-minBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 90)
-minBtn.BorderSizePixel = 0
-minBtn.Text = "âˆ’"
-minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-minBtn.Font = Enum.Font.GothamBold
-minBtn.TextSize = 18
-minBtn.Parent = TopBar
-
-local minCorner = Instance.new("UICorner")
-minCorner.CornerRadius = UDim.new(1, 0)
-minCorner.Parent = minBtn
-
--- Content scroll area
-local ContentFrame = Instance.new("ScrollingFrame")
-ContentFrame.Size = UDim2.new(1, 0, 1, -50)
-ContentFrame.Position = UDim2.new(0, 0, 0, 50)
-ContentFrame.BackgroundTransparency = 1
-ContentFrame.BorderSizePixel = 0
-ContentFrame.ScrollBarThickness = 3
-ContentFrame.ScrollBarImageColor3 = Theme.Accent
-ContentFrame.CanvasSize = UDim2.new(0, 0, 0, 900)
-ContentFrame.Parent = MainFrame
-
--- UI List Layout
-local UIList = Instance.new("UIListLayout")
-UIList.Padding = UDim.new(0, 8)
-UIList.Parent = ContentFrame
-
--- ==================== ESP MODULE (MOBILE OPTIMIZED) ====================
-
-local ESPSettings = {
-    Enabled = true,
-    ShowKillerESP = true,
-    ShowBox = true,
-    ShowName = true,
-    ShowDistance = true,
-    ShowHealth = true,
-    ShowTracers = false,
-    ShowRole = true,
-    KillerOnly = false,
-    MaxDistance = 3000,
-    RefreshRate = 40, -- Lower for mobile performance
-}
-
-local ESPObjects = {}
-local ESPActive = {}
-
-local function CreateESPObject(player)
-    if ESPObjects[player] then return end
-    
-    local box = Drawing.new("Square")
-    box.Visible = false
-    box.Thickness = 2
-    box.Filled = false
-    box.Transparency = 1
-    
-    local nameTag = Drawing.new("Text")
-    nameTag.Visible = false
-    nameTag.Size = 11
-    nameTag.Center = true
-    nameTag.Outline = true
-    nameTag.OutlineColor = Color3.new(0, 0, 0)
-    
-    local distanceTag = Drawing.new("Text")
-    distanceTag.Visible = false
-    distanceTag.Size = 10
-    distanceTag.Center = true
-    distanceTag.Outline = true
-    
-    local healthBar = Drawing.new("Square")
-    healthBar.Visible = false
-    healthBar.Thickness = 2
-    healthBar.Filled = true
-    
-    local tracer = Drawing.new("Line")
-    tracer.Visible = false
-    tracer.Thickness = 1
-    tracer.Transparency = 0.6
-    
-    ESPObjects[player] = {
-        Box = box,
-        NameTag = nameTag,
-        DistanceTag = distanceTag,
-        HealthBar = healthBar,
-        Tracer = tracer,
-    }
-    ESPActive[player] = true
-end
-
-local function GetPlayerRole(player)
-    local character = player.Character
-    if not character then return "Unknown" end
-    
-    -- Check backpack for killer items
-    local backpack = player:FindFirstChild("Backpack")
-    if backpack then
-        for _, tool in pairs(backpack:GetChildren()) do
-            local name = tool.Name:lower()
-            if name:find("knife") or name:find("sword") or 
-               name:find("weapon") or name:find("killer") or
-               name:find("axe") or name:find("scythe") then
+    -- Kiểm tra ba lô
+    local baLo = player:FindFirstChild("Backpack")
+    if baLo then
+        for _, dungCu in pairs(baLo:GetChildren()) do
+            local ten = dungCu.Name:lower()
+            if ten:find("knife") or ten:find("dao") or ten:find("sword") or 
+               ten:find("kiem") or ten:find("killer") or ten:find("axe") or 
+               ten:find("riu") then
                 return "KILLER"
             end
         end
     end
     
-    -- Check character for tools
-    if character then
-        for _, child in pairs(character:GetChildren()) do
-            if child:IsA("Tool") then
-                local name = child.Name:lower()
-                if name:find("knife") or name:find("sword") or 
-                   name:find("weapon") or name:find("killer") then
-                    return "KILLER"
-                end
+    -- Kiểm tra dụng cụ trên tay
+    for _, con in pairs(nhanVat:GetChildren()) do
+        if con:IsA("Tool") then
+            local ten = con.Name:lower()
+            if ten:find("knife") or ten:find("dao") or ten:find("sword") or 
+               ten:find("kiem") or ten:find("weapon") or ten:find("vukhi") then
+                return "KILLER"
             end
         end
     end
     
-    -- Team check
+    -- Kiểm tra team
     if player.Team then
-        local teamName = player.Team.Name:lower()
-        if teamName:find("killer") or teamName:find("hunter") or teamName:find("monster") then
+        local tenTeam = player.Team.Name:lower()
+        if tenTeam:find("killer") or tenTeam:find("hunter") or tenTeam:find("satthu") then
             return "KILLER"
         end
     end
@@ -624,325 +108,782 @@ local function GetPlayerRole(player)
     return "SURVIVOR"
 end
 
-local function UpdateESP(player)
-    local espData = ESPObjects[player]
-    if not espData or not ESPActive[player] then return end
+-- Tạo ESP cho một người chơi
+function ESP.TaoESP(player)
+    if ESP.DangHoatDong[player] then return end
     
-    local character = player.Character
-    if not character then
-        for _, d in pairs(espData) do d.Visible = false end
+    -- Tạo thư mục chứa
+    local thuMuc = Instance.new("Folder")
+    thuMuc.Name = "ClaraESP_" .. player.UserId
+    thuMuc.Parent = CoreGui
+    
+    -- Tạo Billboard GUI (bảng thông tin nổi trên đầu)
+    local bang = Instance.new("BillboardGui")
+    bang.Name = "BangChinh"
+    bang.AlwaysOnTop = true
+    bang.Size = UDim2.new(0, 200, 0, 300)
+    bang.StudsOffset = Vector3.new(0, 2.5, 0)
+    bang.MaxDistance = ESP.CaiDat.KhoangCachToiDa
+    bang.Adornee = player.Character and player.Character:FindFirstChild("Head")
+    bang.Parent = thuMuc
+    
+    -- Khung viền (Box)
+    local khung = Instance.new("Frame")
+    khung.Name = "Khung"
+    khung.Size = UDim2.new(1, 0, 1, 0)
+    khung.BackgroundTransparency = 1
+    khung.BorderSizePixel = 2
+    khung.BorderColor3 = Color3.fromRGB(255, 60, 60)
+    khung.Visible = ESP.CaiDat.HienKhung
+    khung.Parent = bang
+    
+    -- Nhãn tên
+    local nhanTen = Instance.new("TextLabel")
+    nhanTen.Name = "Ten"
+    nhanTen.Size = UDim2.new(1, 0, 0, 18)
+    nhanTen.Position = UDim2.new(0, 0, 0, -24)
+    nhanTen.BackgroundTransparency = 1
+    nhanTen.Text = player.DisplayName
+    nhanTen.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nhanTen.TextStrokeTransparency = 0
+    nhanTen.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nhanTen.Font = Enum.Font.GothamBold
+    nhanTen.TextSize = 12
+    nhanTen.TextXAlignment = Enum.TextXAlignment.Center
+    nhanTen.Visible = ESP.CaiDat.HienTen
+    nhanTen.Parent = bang
+    
+    -- Nhãn khoảng cách
+    local nhanKC = Instance.new("TextLabel")
+    nhanKC.Name = "KhoangCach"
+    nhanKC.Size = UDim2.new(1, 0, 0, 16)
+    nhanKC.Position = UDim2.new(0, 0, 0, -6)
+    nhanKC.BackgroundTransparency = 1
+    nhanKC.Text = ""
+    nhanKC.TextColor3 = Color3.fromRGB(200, 200, 200)
+    nhanKC.TextStrokeTransparency = 0
+    nhanKC.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nhanKC.Font = Enum.Font.Gotham
+    nhanKC.TextSize = 10
+    nhanKC.TextXAlignment = Enum.TextXAlignment.Center
+    nhanKC.Visible = ESP.CaiDat.HienKhoangCach
+    nhanKC.Parent = bang
+    
+    -- Thanh máu (nền)
+    local nenMau = Instance.new("Frame")
+    nenMau.Name = "NenMau"
+    nenMau.Size = UDim2.new(1, 0, 0, 4)
+    nenMau.Position = UDim2.new(0, 0, 1, 6)
+    nenMau.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    nenMau.BorderSizePixel = 0
+    nenMau.Visible = ESP.CaiDat.HienMau
+    nenMau.Parent = bang
+    
+    -- Thanh máu (đầy)
+    local dayMau = Instance.new("Frame")
+    dayMau.Name = "DayMau"
+    dayMau.Size = UDim2.new(1, 0, 1, 0)
+    dayMau.BackgroundColor3 = Color3.fromRGB(0, 255, 60)
+    dayMau.BorderSizePixel = 0
+    dayMau.Parent = nenMau
+    
+    -- Nhãn vai trò
+    local nhanVT = Instance.new("TextLabel")
+    nhanVT.Name = "VaiTro"
+    nhanVT.Size = UDim2.new(1, 0, 0, 16)
+    nhanVT.Position = UDim2.new(0, 0, 1, 12)
+    nhanVT.BackgroundTransparency = 1
+    nhanVT.Text = ""
+    nhanVT.TextColor3 = Color3.fromRGB(255, 180, 40)
+    nhanVT.TextStrokeTransparency = 0
+    nhanVT.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    nhanVT.Font = Enum.Font.GothamBold
+    nhanVT.TextSize = 10
+    nhanVT.TextXAlignment = Enum.TextXAlignment.Center
+    nhanVT.Visible = ESP.CaiDat.HienVaiTro
+    nhanVT.Parent = bang
+    
+    -- Hiệu ứng Highlight (nhìn xuyên tường)
+    local highlight = Instance.new("Highlight")
+    highlight.Name = "HighlightXuyenTuong"
+    highlight.FillTransparency = 0.7
+    highlight.OutlineTransparency = 0
+    highlight.OutlineColor = Color3.fromRGB(255, 60, 60)
+    highlight.FillColor = Color3.fromRGB(255, 60, 60)
+    highlight.Enabled = false
+    highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+    highlight.Parent = thuMuc
+    
+    -- Lưu dữ liệu ESP
+    ESP.DangHoatDong[player] = {
+        ThuMuc = thuMuc,
+        Bang = bang,
+        Khung = khung,
+        Ten = nhanTen,
+        KhoangCach = nhanKC,
+        NenMau = nenMau,
+        DayMau = dayMau,
+        VaiTro = nhanVT,
+        Highlight = highlight,
+    }
+    
+    -- Gán vào đầu nhân vật
+    local nhanVat = player.Character
+    if nhanVat then
+        local dau = nhanVat:FindFirstChild("Head")
+        if dau then
+            bang.Adornee = dau
+            highlight.Adornee = nhanVat
+        end
+    end
+    
+    -- Lắng nghe khi nhân vật được tạo lại
+    player.CharacterAdded:Connect(function(nv)
+        task.wait(0.5)
+        local dau = nv:FindFirstChild("Head")
+        if dau and bang then
+            bang.Adornee = dau
+        end
+        if highlight then
+            highlight.Adornee = nv
+        end
+    end)
+end
+
+-- Cập nhật ESP
+function ESP.CapNhat(player)
+    local duLieu = ESP.DangHoatDong[player]
+    if not duLieu then return end
+    
+    local nhanVat = player.Character
+    if not nhanVat then
+        if duLieu.Bang then duLieu.Bang.Adornee = nil end
+        if duLieu.Highlight then duLieu.Highlight.Adornee = nil end
         return
     end
     
-    local humanoid = character:FindFirstChildOfClass("Humanoid")
-    local rootPart = character:FindFirstChild("HumanoidRootPart")
-    local head = character:FindFirstChild("Head")
+    local humanoid = nhanVat:FindFirstChildOfClass("Humanoid")
+    local goc = nhanVat:FindFirstChild("HumanoidRootPart")
+    local dau = nhanVat:FindFirstChild("Head")
     
-    if not humanoid or not rootPart or not head then
-        for _, d in pairs(espData) do d.Visible = false end
+    if not humanoid or not goc or not dau then
+        if duLieu.Bang then duLieu.Bang.Adornee = nil end
         return
     end
     
-    local role = GetPlayerRole(player)
-    local isKiller = role == "KILLER"
+    -- Đảm bảo gán đúng đối tượng
+    if duLieu.Bang and duLieu.Bang.Adornee ~= dau then
+        duLieu.Bang.Adornee = dau
+    end
+    if duLieu.Highlight and duLieu.Highlight.Adornee ~= nhanVat then
+        duLieu.Highlight.Adornee = nhanVat
+    end
     
-    if ESPSettings.KillerOnly and not isKiller then
-        for _, d in pairs(espData) do d.Visible = false end
+    local vaiTro = ESP.LayVaiTro(player)
+    local laKiller = vaiTro == "KILLER"
+    
+    -- Tính khoảng cách
+    local gocCuaToi = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+    local khoangCach = gocCuaToi and (gocCuaToi.Position - goc.Position).Magnitude or 0
+    
+    -- Kiểm tra khoảng cách tối đa
+    if khoangCach > ESP.CaiDat.KhoangCachToiDa then
+        duLieu.Bang.Enabled = false
+        duLieu.Highlight.Enabled = false
         return
     end
     
-    local headPos = Camera:WorldToScreenPoint(head.Position)
-    local rootPos = Camera:WorldToScreenPoint(rootPart.Position)
-    
-    local myRoot = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
-    local distance = myRoot and (myRoot.Position - rootPart.Position).Magnitude or 0
-    
-    if distance > ESPSettings.MaxDistance or headPos.Z <= 0 then
-        for _, d in pairs(espData) do d.Visible = false end
+    -- Chế độ chỉ hiện Killer
+    if ESP.CaiDat.ChiHienKiller and not laKiller then
+        duLieu.Bang.Enabled = false
+        duLieu.Highlight.Enabled = false
         return
     end
     
-    local color = isKiller and Theme.KillerRed or Theme.SurvivorGreen
+    duLieu.Bang.Enabled = ESP.CaiDat.BatTat
+    duLieu.Bang.MaxDistance = ESP.CaiDat.KhoangCachToiDa
     
-    -- Box
-    if ESPSettings.ShowBox then
-        local boxSize = Vector2.new(1800 / distance, 3500 / distance)
-        espData.Box.Size = boxSize
-        espData.Box.Position = Vector2.new(headPos.X - boxSize.X/2, headPos.Y - boxSize.Y/2)
-        espData.Box.Color = color
-        espData.Box.Visible = true
-    else
-        espData.Box.Visible = false
-    end
+    -- Màu sắc theo vai trò
+    local mauChinh = laKiller and Color3.fromRGB(255, 45, 45) or Color3.fromRGB(45, 255, 85)
     
-    -- Name
-    if ESPSettings.ShowName then
-        espData.NameTag.Text = player.DisplayName .. (ESPSettings.ShowRole and (" [" .. role .. "]") or "")
-        espData.NameTag.Color = color
-        espData.NameTag.Position = Vector2.new(headPos.X, headPos.Y + 14)
-        espData.NameTag.Visible = true
-    else
-        espData.NameTag.Visible = false
-    end
+    -- Cập nhật khung
+    duLieu.Khung.BorderColor3 = mauChinh
+    duLieu.Khung.Visible = ESP.CaiDat.HienKhung
     
-    -- Distance
-    if ESPSettings.ShowDistance then
-        espData.DistanceTag.Text = math.floor(distance) .. "s"
-        espData.DistanceTag.Color = color
-        espData.DistanceTag.Position = Vector2.new(headPos.X, headPos.Y + 26)
-        espData.DistanceTag.Visible = true
-    else
-        espData.DistanceTag.Visible = false
-    end
+    -- Cập nhật tên
+    duLieu.Ten.Text = player.DisplayName
+    duLieu.Ten.TextColor3 = mauChinh
+    duLieu.Ten.Visible = ESP.CaiDat.HienTen
     
-    -- Health
-    if ESPSettings.ShowHealth then
-        local hp = humanoid.Health / humanoid.MaxHealth
-        local barW = 36
-        espData.HealthBar.Size = Vector2.new(barW * hp, 3)
-        espData.HealthBar.Position = Vector2.new(headPos.X - barW/2, headPos.Y - 18)
-        espData.HealthBar.Color = Color3.fromRGB(255 * (1-hp), 255 * hp, 0)
-        espData.HealthBar.Visible = true
-    else
-        espData.HealthBar.Visible = false
-    end
+    -- Cập nhật khoảng cách
+    duLieu.KhoangCach.Text = math.floor(khoangCach) .. " studs"
+    duLieu.KhoangCach.Visible = ESP.CaiDat.HienKhoangCach
     
-    -- Tracers
-    if ESPSettings.ShowTracers then
-        local screenSize = Camera.ViewportSize
-        espData.Tracer.From = Vector2.new(screenSize.X / 2, screenSize.Y)
-        espData.Tracer.To = Vector2.new(rootPos.X, rootPos.Y)
-        espData.Tracer.Color = color
-        espData.Tracer.Visible = true
-    else
-        espData.Tracer.Visible = false
+    -- Cập nhật máu
+    local phanTramMau = humanoid.Health / humanoid.MaxHealth
+    duLieu.DayMau.Size = UDim2.new(phanTramMau, 0, 1, 0)
+    duLieu.DayMau.BackgroundColor3 = Color3.fromRGB(255 * (1-phanTramMau), 255 * phanTramMau, 0)
+    duLieu.NenMau.Visible = ESP.CaiDat.HienMau
+    duLieu.DayMau.Visible = ESP.CaiDat.HienMau
+    
+    -- Cập nhật vai trò
+    duLieu.VaiTro.Text = "[" .. vaiTro .. "]"
+    duLieu.VaiTro.Visible = ESP.CaiDat.HienVaiTro
+    
+    -- Cập nhật Highlight
+    duLieu.Highlight.OutlineColor = mauChinh
+    duLieu.Highlight.FillColor = mauChinh
+    duLieu.Highlight.Enabled = ESP.CaiDat.BatTat and ESP.CaiDat.HienKhung
+end
+
+-- Xóa ESP
+function ESP.Xoa(player)
+    local duLieu = ESP.DangHoatDong[player]
+    if duLieu then
+        pcall(function() duLieu.ThuMuc:Destroy() end)
+        ESP.DangHoatDong[player] = nil
     end
 end
 
--- ==================== BUILD UI SECTIONS ====================
-
--- ESP Section
-ClaraUI:CreateSection(ContentFrame, "ðŸŽ¯ ESP SETTINGS")
-
-local espToggles = {}
-espToggles[1] = ClaraUI:CreateToggle(ContentFrame, "Master ESP", true, function(state)
-    ESPSettings.Enabled = state
-end)
-
-espToggles[2] = ClaraUI:CreateToggle(ContentFrame, "Killer ESP Highlight", true, function(state)
-    ESPSettings.ShowKillerESP = state
-end)
-
-espToggles[3] = ClaraUI:CreateToggle(ContentFrame, "Show Box", true, function(state)
-    ESPSettings.ShowBox = state
-end)
-
-espToggles[4] = ClaraUI:CreateToggle(ContentFrame, "Show Name & Role", true, function(state)
-    ESPSettings.ShowName = state
-end)
-
-espToggles[5] = ClaraUI:CreateToggle(ContentFrame, "Show Distance", true, function(state)
-    ESPSettings.ShowDistance = state
-end)
-
-espToggles[6] = ClaraUI:CreateToggle(ContentFrame, "Show Health Bar", true, function(state)
-    ESPSettings.ShowHealth = state
-end)
-
-espToggles[7] = ClaraUI:CreateToggle(ContentFrame, "Show Tracers", false, function(state)
-    ESPSettings.ShowTracers = state
-end)
-
-espToggles[8] = ClaraUI:CreateToggle(ContentFrame, "Killer Only Mode", false, function(state)
-    ESPSettings.KillerOnly = state
-end)
-
--- Distance Slider
-ClaraUI:CreateSection(ContentFrame, "ðŸ“ RANGE")
-
-ClaraUI:CreateSlider(ContentFrame, "Max Distance", 500, 10000, 3000, function(value)
-    ESPSettings.MaxDistance = value
-end)
-
--- Info Section
-ClaraUI:CreateSection(ContentFrame, "â¤ï¸ INFO")
-
-local infoFrame = Instance.new("Frame")
-infoFrame.Size = UDim2.new(1, -30, 0, 60)
-infoFrame.Position = UDim2.new(0, 15, 0, 0)
-infoFrame.BackgroundColor3 = Theme.Background
-infoFrame.BorderSizePixel = 0
-infoFrame.Parent = ContentFrame
-
-local infoCorner = Instance.new("UICorner")
-infoCorner.CornerRadius = UDim.new(0, 10)
-infoCorner.Parent = infoFrame
-
-local infoLabel = Instance.new("TextLabel")
-infoLabel.Size = UDim2.new(1, -20, 1, 0)
-infoLabel.Position = UDim2.new(0, 10, 0, 0)
-infoLabel.BackgroundTransparency = 1
-infoLabel.Text = "Clara Mobile v3.0 â™¡\nMade with love for NDO\nForsaken Killer ESP"
-infoLabel.TextColor3 = Theme.TextDim
-infoLabel.Font = Enum.Font.Gotham
-infoLabel.TextSize = 11
-infoLabel.TextXAlignment = Enum.TextXAlignment.Left
-infoLabel.TextWrapped = true
-infoLabel.Parent = infoFrame
-
--- Bottom padding
-local padFrame = Instance.new("Frame")
-padFrame.Size = UDim2.new(1, 0, 0, 20)
-padFrame.BackgroundTransparency = 1
-padFrame.Parent = ContentFrame
-
--- ==================== MOBILE FLOATING BUTTON ====================
-
-local FloatButton = Instance.new("TextButton")
-FloatButton.Size = UDim2.new(0, 45, 0, 45)
-FloatButton.Position = UDim2.new(1, -60, 0.5, -22)
-FloatButton.BackgroundColor3 = Theme.Accent
-FloatButton.BorderSizePixel = 0
-FloatButton.Text = "ðŸ’€"
-FloatButton.TextSize = 20
-FloatButton.Font = Enum.Font.GothamBold
-FloatButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-FloatButton.Parent = ScreenGui
-
-local floatCorner = Instance.new("UICorner")
-floatCorner.CornerRadius = UDim.new(1, 0)
-floatCorner.Parent = FloatButton
-
--- Make float button draggable
-local floatDragging = false
-local floatDragStart = nil
-local floatStartPos = nil
-
-FloatButton.InputBegan:Connect(function(input)
-    if input.UserInputType == Enum.UserInputType.Touch then
-        floatDragging = true
-        floatDragStart = input.Position
-        floatStartPos = FloatButton.Position
-    end
-end)
-
-FloatButton.InputEnded:Connect(function(input)
-    if floatDragging then
-        local dist = (input.Position - floatDragStart).Magnitude
-        if dist < 10 then
-            -- It was a tap, toggle GUI
-            MainFrame.Visible = not MainFrame.Visible
-        end
-        floatDragging = false
-    end
-end)
-
-UserInputService.InputChanged:Connect(function(input)
-    if floatDragging and input.UserInputType == Enum.UserInputType.Touch then
-        local delta = input.Position - floatDragStart
-        FloatButton.Position = UDim2.new(
-            floatStartPos.X.Scale, 
-            floatStartPos.X.Offset + delta.X,
-            floatStartPos.Y.Scale,
-            floatStartPos.Y.Offset + delta.Y
-        )
-    end
-end)
-
--- ==================== INITIALIZATION ====================
-
-local function Initialize()
-    DeepBypass()
+-- ==================== GIAO DIỆN GUI MOBILE ====================
+local function TaoGiaoDien()
+    -- Tìm nơi an toàn để hiển thị GUI (tương thích Delta)
+    local cha
+    pcall(function()
+        cha = gethui and gethui() or CoreGui
+    end)
+    if not cha then cha = CoreGui end
     
-    -- Register existing players
-    for _, player in pairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer then
-            CreateESPObject(player)
-        end
-    end
+    local GuiChinh = Instance.new("ScreenGui")
+    GuiChinh.Name = "ClaraDeltaGUI"
+    GuiChinh.Parent = cha
+    GuiChinh.ResetOnSpawn = false
+    GuiChinh.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
     
-    Players.PlayerAdded:Connect(function(player)
-        if player ~= LocalPlayer then
-            task.wait(1.5)
-            CreateESPObject(player)
-        end
+    pcall(function()
+        syn.protect_gui and syn.protect_gui(GuiChinh)
     end)
     
-    Players.PlayerRemoving:Connect(function(player)
-        if ESPObjects[player] then
-            for _, d in pairs(ESPObjects[player]) do
-                pcall(function() d:Remove() end)
+    -- Bảng màu chủ đề
+    local M = {
+        Nen = Color3.fromRGB(18, 18, 22),
+        NenPhu = Color3.fromRGB(28, 28, 35),
+        Do = Color3.fromRGB(200, 50, 50),
+        DoNhat = Color3.fromRGB(240, 70, 70),
+        Vang = Color3.fromRGB(255, 185, 40),
+        Chu = Color3.fromRGB(220, 220, 225),
+        ChuMo = Color3.fromRGB(130, 130, 140),
+        XanhLa = Color3.fromRGB(40, 200, 80),
+    }
+    
+    -- Khung chính
+    local KhungChinh = Instance.new("Frame")
+    KhungChinh.Size = UDim2.new(0, 310, 0, 440)
+    KhungChinh.Position = UDim2.new(0.5, -155, 0.5, -220)
+    KhungChinh.BackgroundColor3 = M.Nen
+    KhungChinh.BorderSizePixel = 0
+    KhungChinh.Visible = true
+    KhungChinh.Parent = GuiChinh
+    
+    local boGoc = Instance.new("UICorner")
+    boGoc.CornerRadius = UDim.new(0, 14)
+    boGoc.Parent = KhungChinh
+    
+    -- Thanh tiêu đề
+    local ThanhTren = Instance.new("Frame")
+    ThanhTren.Size = UDim2.new(1, 0, 0, 48)
+    ThanhTren.BackgroundColor3 = M.NenPhu
+    ThanhTren.BorderSizePixel = 0
+    ThanhTren.Parent = KhungChinh
+    
+    local boGocTren = Instance.new("UICorner")
+    boGocTren.CornerRadius = UDim.new(0, 14)
+    boGocTren.Parent = ThanhTren
+    
+    local suaGoc = Instance.new("Frame")
+    suaGoc.Size = UDim2.new(1, 0, 0, 14)
+    suaGoc.Position = UDim2.new(0, 0, 1, -14)
+    suaGoc.BackgroundColor3 = M.NenPhu
+    suaGoc.BorderSizePixel = 0
+    suaGoc.Parent = ThanhTren
+    
+    -- Tiêu đề
+    local tieuDe = Instance.new("TextLabel")
+    tieuDe.Size = UDim2.new(1, -50, 1, 0)
+    tieuDe.Position = UDim2.new(0, 15, 0, 0)
+    tieuDe.BackgroundTransparency = 1
+    tieuDe.Text = "Clara v4  ♡  NDO"
+    tieuDe.TextColor3 = M.Vang
+    tieuDe.Font = Enum.Font.GothamBlack
+    tieuDe.TextSize = 14
+    tieuDe.TextXAlignment = Enum.TextXAlignment.Left
+    tieuDe.Parent = ThanhTren
+    
+    -- Nút đóng
+    local nutDong = Instance.new("TextButton")
+    nutDong.Size = UDim2.new(0, 30, 0, 30)
+    nutDong.Position = UDim2.new(1, -38, 0.5, -15)
+    nutDong.BackgroundColor3 = Color3.fromRGB(220, 50, 50)
+    nutDong.BorderSizePixel = 0
+    nutDong.Text = "✕"
+    nutDong.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nutDong.Font = Enum.Font.GothamBold
+    nutDong.TextSize = 14
+    nutDong.Parent = ThanhTren
+    
+    local boNutDong = Instance.new("UICorner")
+    boNutDong.CornerRadius = UDim.new(1, 0)
+    boNutDong.Parent = nutDong
+    
+    nutDong.Activated:Connect(function()
+        KhungChinh.Visible = false
+    end)
+    
+    -- Khung cuộn nội dung
+    local KhungCuon = Instance.new("ScrollingFrame")
+    KhungCuon.Size = UDim2.new(1, 0, 1, -48)
+    KhungCuon.Position = UDim2.new(0, 0, 0, 48)
+    KhungCuon.BackgroundTransparency = 1
+    KhungCuon.BorderSizePixel = 0
+    KhungCuon.ScrollBarThickness = 3
+    KhungCuon.ScrollBarImageColor3 = M.Do
+    KhungCuon.CanvasSize = UDim2.new(0, 0, 0, 700)
+    KhungCuon.Parent = KhungChinh
+    
+    local danhSach = Instance.new("UIListLayout")
+    danhSach.Padding = UDim.new(0, 6)
+    danhSach.Parent = KhungCuon
+    
+    -- Đệm trên
+    local dem1 = Instance.new("Frame")
+    dem1.Size = UDim2.new(1, 0, 0, 8)
+    dem1.BackgroundTransparency = 1
+    dem1.Parent = KhungCuon
+    
+    -- Hàm tạo mục
+    local function TaoMuc(chu)
+        local muc = Instance.new("Frame")
+        muc.Size = UDim2.new(1, -20, 0, 26)
+        muc.BackgroundTransparency = 1
+        muc.Parent = KhungCuon
+        
+        local vach = Instance.new("Frame")
+        vach.Size = UDim2.new(0, 20, 0, 1)
+        vach.Position = UDim2.new(0, 10, 0.5, 0)
+        vach.BackgroundColor3 = M.Do
+        vach.BorderSizePixel = 0
+        vach.Parent = muc
+        
+        local nhan = Instance.new("TextLabel")
+        nhan.Size = UDim2.new(0, 0, 1, 0)
+        nhan.Position = UDim2.new(0, 38, 0, 0)
+        nhan.BackgroundTransparency = 1
+        nhan.Text = chu
+        nhan.TextColor3 = M.ChuMo
+        nhan.Font = Enum.Font.GothamBold
+        nhan.TextSize = 10
+        nhan.TextXAlignment = Enum.TextXAlignment.Left
+        nhan.AutomaticSize = Enum.AutomaticSize.X
+        nhan.Parent = muc
+        
+        return muc
+    end
+    
+    -- Hàm tạo nút bật/tắt
+    local function TaoNutBatTat(ten, macDinh, hamGoiLai)
+        local khung = Instance.new("Frame")
+        khung.Size = UDim2.new(1, -24, 0, 42)
+        khung.BackgroundColor3 = M.Nen
+        khung.BorderSizePixel = 0
+        khung.Parent = KhungCuon
+        
+        local bg = Instance.new("UICorner")
+        bg.CornerRadius = UDim.new(0, 10)
+        bg.Parent = khung
+        
+        local nhan = Instance.new("TextLabel")
+        nhan.Size = UDim2.new(0.6, 0, 1, 0)
+        nhan.Position = UDim2.new(0, 12, 0, 0)
+        nhan.BackgroundTransparency = 1
+        nhan.Text = ten
+        nhan.TextColor3 = M.Chu
+        nhan.Font = Enum.Font.GothamSemibold
+        nhan.TextSize = 12
+        nhan.TextXAlignment = Enum.TextXAlignment.Left
+        nhan.Parent = khung
+        
+        -- Nền công tắc
+        local congTacNen = Instance.new("Frame")
+        congTacNen.Size = UDim2.new(0, 46, 0, 24)
+        congTacNen.Position = UDim2.new(1, -58, 0.5, -12)
+        congTacNen.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+        congTacNen.BorderSizePixel = 0
+        congTacNen.Parent = khung
+        
+        local bcn = Instance.new("UICorner")
+        bcn.CornerRadius = UDim.new(1, 0)
+        bcn.Parent = congTacNen
+        
+        -- Núm công tắc
+        local num = Instance.new("Frame")
+        num.Size = UDim2.new(0, 18, 0, 18)
+        num.Position = UDim2.new(0, 3, 0.5, -9)
+        num.BackgroundColor3 = Color3.fromRGB(170, 170, 175)
+        num.BorderSizePixel = 0
+        num.Parent = congTacNen
+        
+        local bnum = Instance.new("UICorner")
+        bnum.CornerRadius = UDim.new(1, 0)
+        bnum.Parent = num
+        
+        local nutBam = Instance.new("TextButton")
+        nutBam.Size = UDim2.new(0, 65, 1, 0)
+        nutBam.Position = UDim2.new(1, -70, 0, 0)
+        nutBam.BackgroundTransparency = 1
+        nutBam.Text = ""
+        nutBam.Parent = khung
+        
+        local trangThai = macDinh
+        
+        local function CapNhatHienThi()
+            if trangThai then
+                congTacNen.BackgroundColor3 = M.Do
+                num.Position = UDim2.new(0, 25, 0.5, -9)
+                num.BackgroundColor3 = Color3.fromRGB(255, 255, 255)
+            else
+                congTacNen.BackgroundColor3 = Color3.fromRGB(55, 55, 60)
+                num.Position = UDim2.new(0, 3, 0.5, -9)
+                num.BackgroundColor3 = Color3.fromRGB(170, 170, 175)
             end
-            ESPObjects[player] = nil
-            ESPActive[player] = nil
+        end
+        
+        CapNhatHienThi()
+        
+        nutBam.Activated:Connect(function()
+            trangThai = not trangThai
+            CapNhatHienThi()
+            hamGoiLai(trangThai)
+        end)
+        
+        return {Khung = khung, DatTrangThai = function(tt) trangThai = tt; CapNhatHienThi(); hamGoiLai(tt) end}
+    end
+    
+    -- === XÂY DỰNG CÁC MỤC GIAO DIỆN ===
+    
+    TaoMuc("🎯 CÀI ĐẶT ESP")
+    
+    local nutTong = TaoNutBatTat("Bật/Tắt ESP", true, function(tt)
+        ESP.CaiDat.BatTat = tt
+    end)
+    
+    TaoNutBatTat("Hiện Khung", true, function(tt)
+        ESP.CaiDat.HienKhung = tt
+    end)
+    
+    TaoNutBatTat("Hiện Tên", true, function(tt)
+        ESP.CaiDat.HienTen = tt
+    end)
+    
+    TaoNutBatTat("Hiện Khoảng Cách", true, function(tt)
+        ESP.CaiDat.HienKhoangCach = tt
+    end)
+    
+    TaoNutBatTat("Hiện Thanh Máu", true, function(tt)
+        ESP.CaiDat.HienMau = tt
+    end)
+    
+    TaoNutBatTat("Hiện Vai Trò", true, function(tt)
+        ESP.CaiDat.HienVaiTro = tt
+    end)
+    
+    TaoNutBatTat("Chỉ Hiện Killer", false, function(tt)
+        ESP.CaiDat.ChiHienKiller = tt
+    end)
+    
+    TaoMuc("⚙️ KHÁC")
+    
+    -- Nút làm mới ESP
+    local khungLamMoi = Instance.new("Frame")
+    khungLamMoi.Size = UDim2.new(1, -24, 0, 42)
+    khungLamMoi.BackgroundColor3 = M.Nen
+    khungLamMoi.BorderSizePixel = 0
+    khungLamMoi.Parent = KhungCuon
+    
+    local blm = Instance.new("UICorner")
+    blm.CornerRadius = UDim.new(0, 10)
+    blm.Parent = khungLamMoi
+    
+    local nutLamMoi = Instance.new("TextButton")
+    nutLamMoi.Size = UDim2.new(1, 0, 1, 0)
+    nutLamMoi.BackgroundColor3 = M.Do
+    nutLamMoi.BorderSizePixel = 0
+    nutLamMoi.Text = "🔄 Làm Mới ESP"
+    nutLamMoi.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nutLamMoi.Font = Enum.Font.GothamBold
+    nutLamMoi.TextSize = 13
+    nutLamMoi.Parent = khungLamMoi
+    
+    local bnlm = Instance.new("UICorner")
+    bnlm.CornerRadius = UDim.new(0, 10)
+    bnlm.Parent = nutLamMoi
+    
+    nutLamMoi.Activated:Connect(function()
+        for _, nguoiChoi in pairs(Players:GetPlayers()) do
+            if nguoiChoi ~= LocalPlayer then
+                ESP.Xoa(nguoiChoi)
+                task.wait(0.1)
+                ESP.TaoESP(nguoiChoi)
+            end
         end
     end)
     
-    -- ESP Update Loop (Mobile-optimized frame skip)
-    local frameCounter = 0
-    local skipFrames = 2 -- Update every 3rd frame for mobile performance
+    TaoMuc("💀 KHOẢNG CÁCH")
     
+    -- Điều chỉnh khoảng cách
+    local khungKC = Instance.new("Frame")
+    khungKC.Size = UDim2.new(1, -24, 0, 55)
+    khungKC.BackgroundColor3 = M.Nen
+    khungKC.BorderSizePixel = 0
+    khungKC.Parent = KhungCuon
+    
+    local bkc = Instance.new("UICorner")
+    bkc.CornerRadius = UDim.new(0, 10)
+    bkc.Parent = khungKC
+    
+    local nhanKC = Instance.new("TextLabel")
+    nhanKC.Size = UDim2.new(0.5, 0, 0, 18)
+    nhanKC.Position = UDim2.new(0, 12, 0, 5)
+    nhanKC.BackgroundTransparency = 1
+    nhanKC.Text = "Khoảng cách tối đa: 3000"
+    nhanKC.TextColor3 = M.Chu
+    nhanKC.Font = Enum.Font.GothamSemibold
+    nhanKC.TextSize = 11
+    nhanKC.TextXAlignment = Enum.TextXAlignment.Left
+    nhanKC.Parent = khungKC
+    
+    local giaTriKC = Instance.new("TextLabel")
+    giaTriKC.Size = UDim2.new(0, 40, 0, 18)
+    giaTriKC.Position = UDim2.new(1, -52, 0, 5)
+    giaTriKC.BackgroundTransparency = 1
+    giaTriKC.Text = "3000"
+    giaTriKC.TextColor3 = M.DoNhat
+    giaTriKC.Font = Enum.Font.GothamBold
+    giaTriKC.TextSize = 11
+    giaTriKC.TextXAlignment = Enum.TextXAlignment.Right
+    giaTriKC.Parent = khungKC
+    
+    -- Nút giảm
+    local nutGiam = Instance.new("TextButton")
+    nutGiam.Size = UDim2.new(0, 35, 0, 24)
+    nutGiam.Position = UDim2.new(0, 12, 0, 25)
+    nutGiam.BackgroundColor3 = M.NenPhu
+    nutGiam.BorderSizePixel = 0
+    nutGiam.Text = "−"
+    nutGiam.TextColor3 = M.Chu
+    nutGiam.Font = Enum.Font.GothamBold
+    nutGiam.TextSize = 16
+    nutGiam.Parent = khungKC
+    
+    local bng = Instance.new("UICorner")
+    bng.CornerRadius = UDim.new(0, 6)
+    bng.Parent = nutGiam
+    
+    -- Nút tăng
+    local nutTang = Instance.new("TextButton")
+    nutTang.Size = UDim2.new(0, 35, 0, 24)
+    nutTang.Position = UDim2.new(1, -47, 0, 25)
+    nutTang.BackgroundColor3 = M.NenPhu
+    nutTang.BorderSizePixel = 0
+    nutTang.Text = "+"
+    nutTang.TextColor3 = M.Chu
+    nutTang.Font = Enum.Font.GothamBold
+    nutTang.TextSize = 16
+    nutTang.Parent = khungKC
+    
+    local bnt = Instance.new("UICorner")
+    bnt.CornerRadius = UDim.new(0, 6)
+    bnt.Parent = nutTang
+    
+    -- Thanh điền đầy khoảng cách
+    local thanhNen = Instance.new("Frame")
+    thanhNen.Size = UDim2.new(1, -106, 0, 24)
+    thanhNen.Position = UDim2.new(0, 53, 0, 25)
+    thanhNen.BackgroundColor3 = M.NenPhu
+    thanhNen.BorderSizePixel = 0
+    thanhNen.Parent = khungKC
+    
+    local btn = Instance.new("UICorner")
+    btn.CornerRadius = UDim.new(0, 6)
+    btn.Parent = thanhNen
+    
+    local thanhDay = Instance.new("Frame")
+    thanhDay.Size = UDim2.new(0.3, 0, 1, 0)
+    thanhDay.BackgroundColor3 = M.Do
+    thanhDay.BorderSizePixel = 0
+    thanhDay.Parent = thanhNen
+    
+    local btd = Instance.new("UICorner")
+    btd.CornerRadius = UDim.new(0, 6)
+    btd.Parent = thanhDay
+    
+    local kcHienTai = 3000
+    local function CapNhatKhoangCach(giaTri)
+        kcHienTai = math.clamp(giaTri, 500, 10000)
+        kcHienTai = math.floor(kcHienTai / 100) * 100
+        ESP.CaiDat.KhoangCachToiDa = kcHienTai
+        nhanKC.Text = "Khoảng cách tối đa: " .. kcHienTai
+        giaTriKC.Text = tostring(kcHienTai)
+        local tiLe = (kcHienTai - 500) / 9500
+        thanhDay.Size = UDim2.new(tiLe, 0, 1, 0)
+    end
+    
+    nutGiam.Activated:Connect(function()
+        CapNhatKhoangCach(kcHienTai - 500)
+    end)
+    
+    nutTang.Activated:Connect(function()
+        CapNhatKhoangCach(kcHienTai + 500)
+    end)
+    
+    TaoMuc("♡ THÔNG TIN")
+    
+    local khungTT = Instance.new("Frame")
+    khungTT.Size = UDim2.new(1, -24, 0, 50)
+    khungTT.BackgroundColor3 = M.Nen
+    khungTT.BorderSizePixel = 0
+    khungTT.Parent = KhungCuon
+    
+    local btt = Instance.new("UICorner")
+    btt.CornerRadius = UDim.new(0, 10)
+    btt.Parent = khungTT
+    
+    local nhanTT = Instance.new("TextLabel")
+    nhanTT.Size = UDim2.new(1, -16, 1, 0)
+    nhanTT.Position = UDim2.new(0, 8, 0, 0)
+    nhanTT.BackgroundTransparency = 1
+    nhanTT.Text = "Clara Mobile v4.0 ♡\nTối ưu cho Delta\nForsaken Killer ESP"
+    nhanTT.TextColor3 = M.ChuMo
+    nhanTT.Font = Enum.Font.Gotham
+    nhanTT.TextSize = 10
+    nhanTT.TextXAlignment = Enum.TextXAlignment.Left
+    nhanTT.TextWrapped = true
+    nhanTT.Parent = khungTT
+    
+    -- Đệm dưới
+    local dem2 = Instance.new("Frame")
+    dem2.Size = UDim2.new(1, 0, 0, 20)
+    dem2.BackgroundTransparency = 1
+    dem2.Parent = KhungCuon
+    
+    -- ==================== NÚT NỔI 💀 ====================
+    local nutNoi = Instance.new("TextButton")
+    nutNoi.Size = UDim2.new(0, 42, 0, 42)
+    nutNoi.Position = UDim2.new(1, -55, 0.7, 0)
+    nutNoi.BackgroundColor3 = M.Do
+    nutNoi.BorderSizePixel = 0
+    nutNoi.Text = "💀"
+    nutNoi.TextSize = 18
+    nutNoi.Font = Enum.Font.GothamBold
+    nutNoi.TextColor3 = Color3.fromRGB(255, 255, 255)
+    nutNoi.Parent = GuiChinh
+    
+    local bnn = Instance.new("UICorner")
+    bnn.CornerRadius = UDim.new(1, 0)
+    bnn.Parent = nutNoi
+    
+    nutNoi.Activated:Connect(function()
+        KhungChinh.Visible = not KhungChinh.Visible
+    end)
+    
+    return GuiChinh, KhungChinh
+end
+
+-- ==================== KHỞI CHẠY CHÍNH ====================
+local function KhoiChay()
+    -- Chạy bypass
+    BypassAntiCheat()
+    
+    -- Tạo giao diện
+    local gui, khungChinh = TaoGiaoDien()
+    
+    -- Đăng ký người chơi hiện có
+    for _, nguoiChoi in pairs(Players:GetPlayers()) do
+        if nguoiChoi ~= LocalPlayer then
+            ESP.TaoESP(nguoiChoi)
+        end
+    end
+    
+    -- Khi có người chơi mới
+    Players.PlayerAdded:Connect(function(nguoiChoi)
+        if nguoiChoi ~= LocalPlayer then
+            task.wait(1)
+            ESP.TaoESP(nguoiChoi)
+        end
+    end)
+    
+    -- Khi người chơi thoát
+    Players.PlayerRemoving:Connect(function(nguoiChoi)
+        ESP.Xoa(nguoiChoi)
+    end)
+    
+    -- Vòng lặp cập nhật ESP
     RunService.RenderStepped:Connect(function()
-        if not ESPSettings.Enabled then return end
+        if not ESP.CaiDat.BatTat then
+            -- Tắt tất cả bảng hiệu
+            for nguoiChoi, duLieu in pairs(ESP.DangHoatDong) do
+                if duLieu.Bang then
+                    duLieu.Bang.Enabled = false
+                end
+                if duLieu.Highlight then
+                    duLieu.Highlight.Enabled = false
+                end
+            end
+            return
+        end
         
-        frameCounter = frameCounter + 1
-        if frameCounter < skipFrames then return end
-        frameCounter = 0
-        
-        for player, _ in pairs(ESPActive) do
-            pcall(function() UpdateESP(player) end)
+        for nguoiChoi, _ in pairs(ESP.DangHoatDong) do
+            pcall(function() ESP.CapNhat(nguoiChoi) end)
         end
     end)
     
-    -- Periodic bypass
+    -- Bypass định kỳ
     task.spawn(function()
         while true do
-            task.wait(45)
+            task.wait(60)
             pcall(function()
-                DeepBypass()
+                BypassAntiCheat()
                 game:GetService("LogService"):ClearLogs()
             end)
         end
     end)
     
-    ClaraUI:Notify("Clara Mobile v3.0", "Forsaken Killer ESP Loaded! â™¡", 4)
+    -- Thông báo thành công
+    task.wait(0.5)
+    StarterGui:SetCore("SendNotification", {
+        Title = "Clara Mobile v4.0 ♡",
+        Text = "Forsaken Killer ESP đã sẵn sàng!",
+        Duration = 5,
+    })
+    
+    print("✓ Clara Mobile v4.0 - Tối ưu Delta")
+    print("  • ESP Bảng hiệu: Đã bật")
+    print("  • Highlight Xuyên Tường: Đã bật")  
+    print("  • Giao diện: Chạm 💀 để mở/tắt")
+    print("  • Làm bằng cả trái tim cho NDO ♡")
 end
 
--- ==================== EXECUTE ====================
-
-local initSuccess, initErr = pcall(Initialize)
-if not initSuccess then
-    warn("Clara Mobile: Retrying init... " .. tostring(initErr))
-    task.wait(2)
-    pcall(Initialize)
-end
-
--- Minimize functionality
-local minimized = false
-local originalSize = MainFrame.Size
-
-minBtn.Activated:Connect(function()
-    minimized = not minimized
-    if minimized then
-        MainFrame.Size = UDim2.new(0, 320, 0, 50)
-        ContentFrame.Visible = false
-    else
-        MainFrame.Size = originalSize
-        ContentFrame.Visible = true
-    end
+-- ==================== THỰC THI ====================
+pcall(function()
+    KhoiChay()
 end)
 
-print("âœ“ Clara Mobile v3.0 Loaded for NDO â™¡")
-print("  â€¢ Mobile GUI: Active")
-print("  â€¢ Killer ESP: Ready")
-print("  â€¢ Anti-Cheat Bypass: Active")
-print("  â€¢ Float Button: Tap to open/close")
-print("  â€¢ Drag float button to reposition")
-
-return {
-    ESP = ESPSettings,
-    Toggles = ClaraUI.Toggles,
-    Notify = ClaraUI.Notify,
-    ShowGUI = function() MainFrame.Visible = true end,
-    HideGUI = function() MainFrame.Visible = false end,
-}
+-- Dự phòng nếu lỗi
+task.spawn(function()
+    if not next(ESP.DangHoatDong) then
+        task.wait(2)
+        pcall(function()
+            BypassAntiCheat()
+            KhoiChay()
+        end)
+    end
+end)
